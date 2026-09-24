@@ -3,7 +3,7 @@ const cors = require('cors');
 require('dotenv').config();
 const axios = require('axios');
 const Database = require('better-sqlite3');
-const { sendThankYouEmail, sendAdminNotification } = require('./Email');
+const { sendThankYouEmail, sendAdminNotification } = require('./email');
 
 const app = express();
 app.use(cors());
