@@ -45,10 +45,10 @@ db.exec(`
 `);
 
 console.log("✅ Database ready: orders.db");
-console.log(
-  "Paystack Key:",
-  process.env.PAYSTACK_SECRET_KEY ? "✓ Loaded" : "❌ Missing"
-);
+const keyPreview = process.env.PAYSTACK_SECRET_KEY
+  ? process.env.PAYSTACK_SECRET_KEY.substring(0, 8) + '...' + process.env.PAYSTACK_SECRET_KEY.slice(-4)
+  : 'MISSING';
+console.log(`Paystack Key: ${keyPreview}`);
 console.log(
   "Email Account:",
   process.env.EMAIL_USER ? `✓ ${process.env.EMAIL_USER}` : "❌ Missing"
