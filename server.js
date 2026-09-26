@@ -2,15 +2,18 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 const axios = require('axios');
-const crypto = require('crypto');
 const Database = require('better-sqlite3');
 const { sendThankYouEmail, sendAdminNotification, sendShippedEmail } = require('./email');
+const crypto = require('crypto');
+
+const app = express();
+
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:5175',
   'http://localhost:5176',
-  'https://hallo-stores-global.vercel.app',
+  'https://hallo-stores-global.vercel.app'
 ];
 
 const corsOptions = {
@@ -18,14 +21,13 @@ const corsOptions = {
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+      return callback(new Error('CORS policy does not allow this origin.'), false);
     }
     return callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 };
 
 app.use(cors(corsOptions));
