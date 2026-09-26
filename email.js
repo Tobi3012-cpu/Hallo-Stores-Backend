@@ -180,4 +180,83 @@ async function sendAdminNotification(order) {
   return transporter.sendMail(mailOptions);
 }
 
-module.exports = { sendThankYouEmail, sendAdminNotification };
+// === 3. Order Shipped Email ===
+async function sendShippedEmail(order) {
+  const trackingInfo = order.tracking_number
+    ? `<p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 8px 0;">
+         <strong>Tracking Number:</strong> ${order.tracking_number}
+       </p>`
+    : '';
+
+  const mailOptions = {
+    from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
+    to: order.customer_email,
+    subject: `📦 Your order ${order.order_number} has been shipped!`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8"></head>
+      <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #F8F9FA;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #FFFFFF;">
+          <div style="background-color: #16A34A; padding: 40px 30px; text-align: center;">
+            <h1 style="color: #FFFFFF; margin: 0; font-size: 28px; font-weight: 800;">
+              📦 Your Order is On the Way!
+            </h1>
+            <p style="color: #DCFCE7; margin: 8px 0 0 0; font-size: 14px;">
+              Order ${order.order_number}
+            </p>
+          </div>
+
+          <div style="padding: 40px 30px;">
+            <h2 style="color: #0F172A; margin: 0 0 12px 0; font-size: 22px;">
+              Hi ${order.customer_name.split(' ')[0]},
+            </h2>
+            <p style="color: #475569; line-height: 1.7; margin: 0 0 20px 0;">
+              Great news! Your order has been shipped and is on its way to you.
+            </p>
+
+            <div style="background-color: #F0FDF4; border-left: 4px solid #16A34A; padding: 16px; border-radius: 8px; margin-bottom: 24px;">
+              <p style="color: #15803D; font-weight: 700; margin: 0; font-size: 14px;">
+                🚚 Estimated Delivery
+              </p>
+              ${trackingInfo}
+              <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 8px 0 0 0;">
+                Your order will be delivered to: <br>
+                <strong>${order.customer_address}</strong>
+              </p>
+            </div>
+
+            <p style="color: #475569; font-size: 14px; line-height: 1.7; margin: 0 0 16px 0;">
+              You can track your order anytime by visiting:
+              <br>
+              <a href="https://hallo-stores-global.vercel.app/order/${order.order_number}" style="color: #2563EB; font-weight: 600;">
+                hallo-stores-global.vercel.app/order/${order.order_number}
+              </a>
+            </p>
+
+            <p style="color: #475569; font-size: 14px; line-height: 1.7; margin: 0;">
+              Thank you for shopping with Hallo Stores!
+            </p>
+          </div>
+
+          <div style="background-color: #0F172A; padding: 30px; text-align: center;">
+            <p style="color: #94A3B8; font-size: 13px; margin: 0 0 8px 0;">
+              Questions? Reply to this email or contact us at
+            </p>
+            <p style="color: #60A5FA; font-size: 13px; margin: 0 0 16px 0;">
+              ${process.env.EMAIL_USER}
+            </p>
+            <p style="color: #475569; font-size: 12px; margin: 0;">
+              © ${new Date().getFullYear()} Hallo Stores
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+  };
+
+  return transporter.sendMail(mailOptions);
+}
+
+module.exports = { sendThankYouEmail, sendAdminNotification, sendShippedEmail };

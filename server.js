@@ -2,10 +2,9 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 const axios = require('axios');
+const crypto = require('crypto');
 const Database = require('better-sqlite3');
-const { sendThankYouEmail, sendAdminNotification } = require('./email');
-
-const app = express();
+const { sendThankYouEmail, sendAdminNotification, sendShippedEmail } = require('./email');
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
@@ -31,7 +30,11 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buffer) => {
+    req.rawBody = buffer;
+  },
+}));
 
 // === Database Setup ===
 const dbPath = process.env.NODE_ENV === 'production' 
@@ -54,10 +57,20 @@ db.exec(`
     total REAL,
     status TEXT DEFAULT 'pending',
     email_sent INTEGER DEFAULT 0,
+    shipped_email_sent INTEGER DEFAULT 0,
+    tracking_number TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     paid_at DATETIME
   )
 `);
+
+const orderColumns = db.prepare(`PRAGMA table_info(orders)`).all().map(column => column.name);
+if (!orderColumns.includes('shipped_email_sent')) {
+  db.exec(`ALTER TABLE orders ADD COLUMN shipped_email_sent INTEGER DEFAULT 0`);
+}
+if (!orderColumns.includes('tracking_number')) {
+  db.exec(`ALTER TABLE orders ADD COLUMN tracking_number TEXT`);
+}
 
 console.log("✅ Database ready: orders.db");
 const keyPreview = process.env.PAYSTACK_SECRET_KEY
@@ -143,6 +156,51 @@ app.post('/api/paystack/initialize', async (req, res) => {
   }
 });
 
+// === Paystack Webhook ===
+app.post('/api/paystack/webhook', async (req, res) => {
+  const signature = req.headers['x-paystack-signature'];
+  const hash = crypto
+    .createHmac('sha512', process.env.PAYSTACK_SECRET_KEY)
+    .update(req.rawBody)
+    .digest('hex');
+
+  if (!signature || signature.length !== hash.length || !crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(signature))) {
+    return res.sendStatus(401);
+  }
+
+  const event = req.body;
+
+  if (event.event === 'charge.success') {
+    const reference = event.data.reference;
+    console.log(`Webhook: Payment confirmed for ${reference}`);
+
+    const order = db.prepare(`SELECT * FROM orders WHERE reference = ?`).get(reference);
+
+    if (!order) {
+      console.log(`Webhook: Order not found for ${reference}`);
+      return res.sendStatus(200);
+    }
+
+    db.prepare(`UPDATE orders SET status = 'paid', paid_at = CURRENT_TIMESTAMP WHERE reference = ?`).run(reference);
+
+    if (!order.email_sent) {
+      order.items = JSON.parse(order.items);
+      try {
+        await Promise.all([
+          sendThankYouEmail(order),
+          sendAdminNotification(order),
+        ]);
+        db.prepare(`UPDATE orders SET email_sent = 1 WHERE reference = ?`).run(reference);
+        console.log(`📧 Emails sent via webhook for ${order.order_number}`);
+      } catch (err) {
+        console.error('❌ Email failed in webhook:', err.message);
+      }
+    }
+  }
+
+  res.sendStatus(200);
+});
+
 // === Verify Payment & Send Emails ===
 app.get('/api/paystack/verify/:reference', async (req, res) => {
   const { reference } = req.params;
@@ -160,40 +218,23 @@ app.get('/api/paystack/verify/:reference', async (req, res) => {
       return res.json({ status: 'failed' });
     }
 
-    // Fetch the full order from DB
     const order = db.prepare(`SELECT * FROM orders WHERE reference = ?`).get(reference);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
+    db.prepare(`UPDATE orders SET status = 'paid', paid_at = CURRENT_TIMESTAMP WHERE reference = ? AND status = 'pending'`).run(reference);
 
-    // Update order to "paid"
-    const updateStmt = db.prepare(`
-      UPDATE orders 
-      SET status = 'paid', paid_at = CURRENT_TIMESTAMP 
-      WHERE reference = ?
-    `);
-    updateStmt.run(reference);
-
-    console.log(`💰 Order PAID: ${order.order_number}`);
-
-    // Parse items back to array for email
-    order.items = JSON.parse(order.items);
-
-    // Send emails only once
+    // Fallback email send in case the webhook has not fired yet
     if (!order.email_sent) {
+      order.items = JSON.parse(order.items);
       try {
-        // Send both emails in parallel for speed
         await Promise.all([
           sendThankYouEmail(order),
           sendAdminNotification(order),
         ]);
-
         db.prepare(`UPDATE orders SET email_sent = 1 WHERE reference = ?`).run(reference);
-        console.log(`📧 Emails sent for ${order.order_number}`);
-      } catch (emailError) {
-        console.error('❌ Email failed:', emailError.message);
-        // Don't fail the payment if email fails
+        console.log(`📧 Emails sent via verify for ${order.order_number}`);
+      } catch (err) {
+        console.error('❌ Email failed in verify:', err.message);
       }
     }
 
@@ -222,23 +263,45 @@ app.get('/api/orders/:orderNumber', (req, res) => {
   res.json(order);
 });
 
-// === Update Order Status (Admin: pending → paid → shipped → delivered) ===
-app.patch('/api/orders/:orderNumber/status', (req, res) => {
-  const { status } = req.body;
-  const validStatuses = ['pending', 'paid', 'shipped', 'delivered', 'cancelled'];
-  
+// === Update Order Status (Admin) ===
+app.patch('/api/orders/:orderNumber/status', async (req, res) => {
+  const { status, trackingNumber } = req.body;
+  const validStatuses = ['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled'];
+
   if (!validStatuses.includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
   }
 
-  const result = db.prepare(`UPDATE orders SET status = ? WHERE order_number = ?`).run(status, req.params.orderNumber);
-  
-  if (result.changes === 0) {
+  const order = db.prepare(`SELECT * FROM orders WHERE order_number = ?`).get(req.params.orderNumber);
+  if (!order) {
     return res.status(404).json({ error: 'Order not found' });
+  }
+
+  db.prepare(`UPDATE orders SET status = ?, tracking_number = COALESCE(?, tracking_number) WHERE order_number = ?`)
+    .run(status, trackingNumber || null, req.params.orderNumber);
+
+  if (status === 'shipped' && !order.shipped_email_sent) {
+    try {
+      order.items = JSON.parse(order.items);
+      order.tracking_number = trackingNumber || order.tracking_number || null;
+      await sendShippedEmail(order);
+      db.prepare(`UPDATE orders SET shipped_email_sent = 1 WHERE order_number = ?`).run(req.params.orderNumber);
+      console.log(`📧 Shipped email sent for ${order.order_number}`);
+    } catch (err) {
+      console.error('❌ Shipped email failed:', err.message);
+    }
   }
 
   console.log(`📦 Order ${req.params.orderNumber} → ${status}`);
   res.json({ success: true, status });
+});
+
+// === Get Single Order (Public Tracking) ===
+app.get('/api/orders/track/:orderNumber', (req, res) => {
+  const order = db.prepare(`SELECT * FROM orders WHERE order_number = ?`).get(req.params.orderNumber);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+  order.items = JSON.parse(order.items);
+  res.json(order);
 });
 
 const PORT = process.env.PORT || 5000;;
