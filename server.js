@@ -85,9 +85,7 @@ app.post('/api/paystack/initialize', async (req, res) => {
     return res.status(400).json({ error: 'Customer information is required' });
   }
 
-  const subtotal = amount / 100;
-  const shipping = subtotal > 100000 ? 0 : 2000;
-  const total = subtotal; // amount already includes shipping from frontend
+  const total = amount / 100;
 
   try {
     const response = await axios.post(
@@ -116,8 +114,8 @@ app.post('/api/paystack/initialize', async (req, res) => {
 
     const insertOrder = db.prepare(`
       INSERT INTO orders 
-        (order_number, reference, customer_name, customer_email, customer_phone, customer_address, items, subtotal, shipping, total, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (order_number, reference, customer_name, customer_email, customer_phone, customer_address, items, total, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     insertOrder.run(
@@ -128,8 +126,6 @@ app.post('/api/paystack/initialize', async (req, res) => {
       customer.phone,
       customer.address,
       JSON.stringify(items),
-      subtotal - shipping,
-      shipping,
       total,
       'pending'
     );
