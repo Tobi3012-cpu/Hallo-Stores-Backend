@@ -80,7 +80,7 @@ app.post('/api/paystack/initialize', async (req, res) => {
       {
         email: email,
         amount: amount,
-        channels: ['card'],
+        channels: ['card'channels: ['card', 'bank', 'ussd', 'qr', 'bank_transfer', 'mobile_money'],],
         callback_url: 'https://hallo-stores-global.vercel.app/checkout',
         metadata: {
           customer_name: customer.name,
