@@ -257,6 +257,26 @@ app.get('/api/orders', (req, res) => {
   res.json(formatted);
 });
 
+// Public order lookup by order number + email
+app.post('/api/orders/lookup', (req, res) => {
+  const { orderNumber, email } = req.body;
+
+  if (!orderNumber || !email) {
+    return res.status(400).json({ error: 'Order number and email are required' });
+  }
+
+  const order = db.prepare(
+    `SELECT * FROM orders WHERE order_number = ? AND LOWER(customer_email) = LOWER(?)`
+  ).get(orderNumber.trim(), email.trim());
+
+  if (!order) {
+    return res.status(404).json({ error: 'No order found with those details' });
+  }
+
+  order.items = JSON.parse(order.items);
+  res.json(order);
+});
+
 // === Get Single Order ===
 app.get('/api/orders/:orderNumber', (req, res) => {
   const order = db.prepare(`SELECT * FROM orders WHERE order_number = ?`).get(req.params.orderNumber);
