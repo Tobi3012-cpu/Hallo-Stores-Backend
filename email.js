@@ -1,12 +1,15 @@
+const dns = require('dns');
+// Prefer IPv4 to avoid unreachable IPv6 routes in hosted environments.
+dns.setDefaultResultOrder('ipv4first');
+
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-// Create the transporter once and reuse it
+// Create the transporter
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
   port: 465,
   secure: true,
-  family: 4,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
