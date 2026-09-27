@@ -1,25 +1,15 @@
-const dns = require('dns');
-// Prefer IPv4 to avoid unreachable IPv6 routes in hosted environments.
-dns.setDefaultResultOrder('ipv4first');
-
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 require('dotenv').config();
 
-// Create the transporter
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  connectionTimeout: 20000,
-  greetingTimeout: 20000,
-  socketTimeout: 20000,
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// === 1. Customer Thank You Email ===
+// For testing, Resend lets you send from onboarding@resend.dev
+// Once you verify your own domain, change this to something like 'Hallo Stores <orders@hallostores.com>'
+const FROM_EMAIL = 'Hallo Stores <onboarding@resend.dev>';
+
+// ============================================
+// 1. Customer Thank You Email
+// ============================================
 async function sendThankYouEmail(order) {
   const itemsHtml = order.items.map(item => `
     <tr>
@@ -35,8 +25,8 @@ async function sendThankYouEmail(order) {
     </tr>
   `).join('');
 
-  const mailOptions = {
-    from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
+  const { data, error } = await resend.emails.send({
+    from: FROM_EMAIL,
     to: order.customer_email,
     subject: `🎉 Order Confirmed - ${order.order_number}`,
     html: `
@@ -49,7 +39,6 @@ async function sendThankYouEmail(order) {
       <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #F8F9FA;">
         <div style="max-width: 600px; margin: 0 auto; background-color: #FFFFFF;">
           
-          <!-- Header -->
           <div style="background-color: #2563EB; padding: 40px 30px; text-align: center;">
             <h1 style="color: #FFFFFF; margin: 0; font-size: 32px; font-weight: 800;">
               Hallo<span style="color: #93C5FD;">Stores</span>
@@ -57,7 +46,6 @@ async function sendThankYouEmail(order) {
             <p style="color: #DBEAFE; margin: 8px 0 0 0; font-size: 14px;">Thank you for your order!</p>
           </div>
 
-          <!-- Greeting -->
           <div style="padding: 40px 30px 20px;">
             <h2 style="color: #0F172A; margin: 0 0 12px 0; font-size: 22px;">
               Hi ${order.customer_name.split(' ')[0]}, 🎉
@@ -68,7 +56,6 @@ async function sendThankYouEmail(order) {
             </p>
           </div>
 
-          <!-- Order Details -->
           <div style="padding: 0 30px 20px;">
             <div style="background-color: #F1F5F9; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
               <table style="width: 100%; font-size: 14px;">
@@ -79,8 +66,8 @@ async function sendThankYouEmail(order) {
                 <tr>
                   <td style="color: #64748B; padding: 4px 0;">Order Date:</td>
                   <td style="color: #0F172A; font-weight: 600; text-align: right;">
-                    ${new Date(order.created_at).toLocaleDateString('en-NG', { 
-                      year: 'numeric', month: 'long', day: 'numeric' 
+                    ${new Date(order.created_at).toLocaleDateString('en-NG', {
+                      year: 'numeric', month: 'long', day: 'numeric'
                     })}
                   </td>
                 </tr>
@@ -96,7 +83,6 @@ async function sendThankYouEmail(order) {
             </div>
           </div>
 
-          <!-- Items Table -->
           <div style="padding: 0 30px 20px;">
             <h3 style="color: #0F172A; font-size: 16px; margin: 0 0 12px 0;">Order Items</h3>
             <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
@@ -113,7 +99,6 @@ async function sendThankYouEmail(order) {
             </table>
           </div>
 
-          <!-- Total -->
           <div style="padding: 0 30px 30px;">
             <div style="background-color: #EFF6FF; padding: 20px; border-radius: 8px;">
               <table style="width: 100%; font-size: 16px;">
@@ -127,7 +112,6 @@ async function sendThankYouEmail(order) {
             </div>
           </div>
 
-          <!-- Delivery Address -->
           <div style="padding: 0 30px 30px;">
             <h3 style="color: #0F172A; font-size: 16px; margin: 0 0 8px 0;">Delivery Address</h3>
             <p style="color: #475569; line-height: 1.6; margin: 0; font-size: 14px;">
@@ -137,13 +121,22 @@ async function sendThankYouEmail(order) {
             </p>
           </div>
 
-          <!-- Footer -->
+          <div style="padding: 0 30px 30px;">
+            <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0;">
+              You can track your order anytime at:
+              <br>
+              <a href="https://hallo-stores-global.vercel.app/order/${order.order_number}" style="color: #2563EB; font-weight: 600;">
+                hallo-stores-global.vercel.app/order/${order.order_number}
+              </a>
+            </p>
+          </div>
+
           <div style="background-color: #0F172A; padding: 30px; text-align: center;">
             <p style="color: #94A3B8; font-size: 13px; margin: 0 0 8px 0;">
               Need help? Reply to this email or contact us at
             </p>
             <p style="color: #60A5FA; font-size: 13px; margin: 0 0 16px 0;">
-              ${process.env.EMAIL_USER}
+              hallostoresglobal@gmail.com
             </p>
             <p style="color: #475569; font-size: 12px; margin: 0;">
               © ${new Date().getFullYear()} Hallo Stores. All rights reserved.
@@ -154,19 +147,27 @@ async function sendThankYouEmail(order) {
       </body>
       </html>
     `,
-  };
+  });
 
-  return transporter.sendMail(mailOptions);
+  if (error) {
+    console.error('❌ Resend error (thank you):', error);
+    throw new Error(error.message);
+  }
+
+  console.log(`📧 Thank-you email sent to ${order.customer_email} (ID: ${data.id})`);
+  return data;
 }
 
-// === 2. Admin Notification Email ===
+// ============================================
+// 2. Admin Notification Email
+// ============================================
 async function sendAdminNotification(order) {
   const itemsList = order.items
     .map(item => `• ${item.name} × ${item.quantity} — ₦${(item.price * item.quantity).toLocaleString()}`)
     .join('<br>');
 
-  const mailOptions = {
-    from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
+  const { data, error } = await resend.emails.send({
+    from: FROM_EMAIL,
     to: process.env.ADMIN_EMAIL,
     subject: `💰 New Sale! ${order.order_number} — ₦${order.total.toLocaleString()}`,
     html: `
@@ -184,12 +185,20 @@ async function sendAdminNotification(order) {
         <p style="line-height: 1.8;">${itemsList}</p>
       </div>
     `,
-  };
+  });
 
-  return transporter.sendMail(mailOptions);
+  if (error) {
+    console.error('❌ Resend error (admin):', error);
+    throw new Error(error.message);
+  }
+
+  console.log(`📧 Admin notification sent (ID: ${data.id})`);
+  return data;
 }
 
-// === 3. Order Shipped Email ===
+// ============================================
+// 3. Order Shipped Email
+// ============================================
 async function sendShippedEmail(order) {
   const trackingInfo = order.tracking_number
     ? `<p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 8px 0;">
@@ -197,8 +206,8 @@ async function sendShippedEmail(order) {
        </p>`
     : '';
 
-  const mailOptions = {
-    from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
+  const { data, error } = await resend.emails.send({
+    from: FROM_EMAIL,
     to: order.customer_email,
     subject: `📦 Your order ${order.order_number} has been shipped!`,
     html: `
@@ -236,7 +245,7 @@ async function sendShippedEmail(order) {
             </div>
 
             <p style="color: #475569; font-size: 14px; line-height: 1.7; margin: 0 0 16px 0;">
-              You can track your order anytime by visiting:
+              Track your order anytime at:
               <br>
               <a href="https://hallo-stores-global.vercel.app/order/${order.order_number}" style="color: #2563EB; font-weight: 600;">
                 hallo-stores-global.vercel.app/order/${order.order_number}
@@ -253,7 +262,7 @@ async function sendShippedEmail(order) {
               Questions? Reply to this email or contact us at
             </p>
             <p style="color: #60A5FA; font-size: 13px; margin: 0 0 16px 0;">
-              ${process.env.EMAIL_USER}
+              hallostoresglobal@gmail.com
             </p>
             <p style="color: #475569; font-size: 12px; margin: 0;">
               © ${new Date().getFullYear()} Hallo Stores
@@ -263,9 +272,15 @@ async function sendShippedEmail(order) {
       </body>
       </html>
     `,
-  };
+  });
 
-  return transporter.sendMail(mailOptions);
+  if (error) {
+    console.error('❌ Resend error (shipped):', error);
+    throw new Error(error.message);
+  }
+
+  console.log(`📧 Shipped email sent to ${order.customer_email} (ID: ${data.id})`);
+  return data;
 }
 
 module.exports = { sendThankYouEmail, sendAdminNotification, sendShippedEmail };
