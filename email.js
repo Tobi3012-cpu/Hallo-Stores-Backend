@@ -1,16 +1,21 @@
-const brevo = require('@getbrevo/brevo');
+const { Resend } = require('resend');
+const { BrevoClient } = require('@getbrevo/brevo');
 require('dotenv').config();
 
-// Initialize Brevo API client
-const apiInstance = new brevo.TransactionalEmailsApi();
-const apiKey = apiInstance.authentications['apiKey'];
-apiKey.apiKey = process.env.BREVO_API_KEY;
+// Initialize Brevo for customer emails
+const brevo = new BrevoClient({
+  apiKey: process.env.BREVO_API_KEY,
+});
 
-// Sender info
-const SENDER = {
+// Initialize Resend for admin emails
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+const BREVO_SENDER = {
   name: 'Hallo Stores',
   email: 'hallostoresglobal@gmail.com',
 };
+
+const RESEND_FROM_EMAIL = 'Hallo Stores <onboarding@resend.dev>';
 
 // ============================================
 // 1. Customer Thank You Email
@@ -30,11 +35,7 @@ async function sendThankYouEmail(order) {
     </tr>
   `).join('');
 
-  const email = new brevo.SendSmtpEmail();
-  email.sender = SENDER;
-  email.to = [{ email: order.customer_email, name: order.customer_name }];
-  email.subject = `🎉 Order Confirmed - ${order.order_number}`;
-  email.htmlContent = `
+  const htmlContent = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -153,7 +154,12 @@ async function sendThankYouEmail(order) {
     </html>
   `;
 
-  const result = await apiInstance.sendTransacEmail(email);
+  const result = await brevo.transactionalEmails.sendTransacEmail({
+    subject: `🎉 Order Confirmed - ${order.order_number}`,
+    htmlContent,
+    sender: BREVO_SENDER,
+    to: [{ email: order.customer_email, name: order.customer_name }],
+  });
   console.log(`📧 Thank-you email sent to ${order.customer_email} (ID: ${result.messageId})`);
   return result;
 }
@@ -166,11 +172,7 @@ async function sendAdminNotification(order) {
     .map(item => `• ${item.name} × ${item.quantity} — ₦${(item.price * item.quantity).toLocaleString()}`)
     .join('<br>');
 
-  const email = new brevo.SendSmtpEmail();
-  email.sender = SENDER;
-  email.to = [{ email: process.env.ADMIN_EMAIL, name: 'Hallo Stores Admin' }];
-  email.subject = `💰 New Sale! ${order.order_number} — ₦${order.total.toLocaleString()}`;
-  email.htmlContent = `
+  const html = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <h2 style="color: #16A34A;">💰 New Order Received!</h2>
       <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
@@ -186,7 +188,14 @@ async function sendAdminNotification(order) {
     </div>
   `;
 
-  const result = await apiInstance.sendTransacEmail(email);
+  const { data, error } = await resend.emails.send({
+    from: RESEND_FROM_EMAIL,
+    to: process.env.ADMIN_EMAIL,
+    subject: `💰 New Sale! ${order.order_number} — ₦${order.total.toLocaleString()}`,
+    html,
+  });
+  if (error) throw error;
+  const result = data;
   console.log(`📧 Admin notification sent (ID: ${result.messageId})`);
   return result;
 }
@@ -201,11 +210,7 @@ async function sendShippedEmail(order) {
        </p>`
     : '';
 
-  const email = new brevo.SendSmtpEmail();
-  email.sender = SENDER;
-  email.to = [{ email: order.customer_email, name: order.customer_name }];
-  email.subject = `📦 Your order ${order.order_number} has been shipped!`;
-  email.htmlContent = `
+  const htmlContent = `
     <!DOCTYPE html>
     <html>
     <head><meta charset="utf-8"></head>
@@ -268,7 +273,12 @@ async function sendShippedEmail(order) {
     </html>
   `;
 
-  const result = await apiInstance.sendTransacEmail(email);
+  const result = await brevo.transactionalEmails.sendTransacEmail({
+    subject: `📦 Your order ${order.order_number} has been shipped!`,
+    htmlContent,
+    sender: BREVO_SENDER,
+    to: [{ email: order.customer_email, name: order.customer_name }],
+  });
   console.log(`📧 Shipped email sent to ${order.customer_email} (ID: ${result.messageId})`);
   return result;
 }
