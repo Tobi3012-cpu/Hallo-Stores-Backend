@@ -196,7 +196,7 @@ async function sendAdminNotification(order) {
   });
   if (error) throw error;
   const result = data;
-  console.log(`📧 Admin notification sent (ID: ${result.messageId})`);
+  console.log(`📧 Admin notification sent to ${process.env.ADMIN_EMAIL}`);
   return result;
 }
 
