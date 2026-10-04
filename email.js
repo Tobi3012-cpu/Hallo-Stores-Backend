@@ -131,8 +131,8 @@ async function sendThankYouEmail(order) {
           <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0;">
             You can track your order anytime at:
             <br>
-            <a href="https://hallo-stores-global.vercel.app/order/${order.order_number}" style="color: #2563EB; font-weight: 600;">
-              hallo-stores-global.vercel.app/order/${order.order_number}
+            <a href="https://www.hallostores.ng/order/${order.order_number}" style="color: #2563EB; font-weight: 600;">
+              www.hallostores.ng/order/${order.order_number}
             </a>
           </p>
         </div>
@@ -247,8 +247,8 @@ async function sendShippedEmail(order) {
           <p style="color: #475569; font-size: 14px; line-height: 1.7; margin: 0 0 16px 0;">
             Track your order anytime at:
             <br>
-            <a href="https://hallo-stores-global.vercel.app/order/${order.order_number}" style="color: #2563EB; font-weight: 600;">
-              hallo-stores-global.vercel.app/order/${order.order_number}
+            <a href="https://www.hallostores.ng/order/${order.order_number}" style="color: #2563EB; font-weight: 600;">
+              www.hallostores.ng/order/${order.order_number}
             </a>
           </p>
 
