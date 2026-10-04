@@ -13,7 +13,9 @@ const allowedOrigins = [
   'http://localhost:5174',
   'http://localhost:5175',
   'http://localhost:5176',
-  'https://hallo-stores-global.vercel.app'
+  'https://hallo-stores-global.vercel.app',
+  'https://hallostores.ng',
+  'https://www.hallostores.ng',
 ];
 
 const corsOptions = {
@@ -109,7 +111,7 @@ app.post('/api/paystack/initialize', async (req, res) => {
         email: email,
         amount: amount,
         channels: ['card', 'bank', 'ussd', 'qr', 'bank_transfer', 'mobile_money'],
-        callback_url: 'https://hallo-stores-global.vercel.app/checkout',
+        callback_url: 'https://www.hallostores.ng/checkout',
         metadata: {
           customer_name: customer.name,
           customer_phone: customer.phone,
